@@ -1,15 +1,20 @@
-﻿using System;
+﻿using System.Collections;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace IWander.Memory
 {
-  public class Mem<T> : IDisposable
+  public class Mem<T> : IEnumerable<T>, IDisposable
     where T : unmanaged
   {
+
     private bool _disposed = false;
     private IntPtr _native;
     private long _length;
+
+    public long Length => _length;
+
+    public long Position { get; set; } 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Mem(long length)
@@ -24,6 +29,7 @@ namespace IWander.Memory
       var size = sizeof(T) * length;
       _native = Marshal.AllocHGlobal(new IntPtr(size));
       _length = length;
+      Position = 0;
       InitMemory();
 
       void InitMemory()
@@ -40,7 +46,7 @@ namespace IWander.Memory
       }
     }
 
-    public unsafe T this[int index]
+    public unsafe T this[long index]
     {
       [MethodImpl(MethodImplOptions.AggressiveInlining)]
       get => ((T*)_native)[index];
@@ -48,7 +54,10 @@ namespace IWander.Memory
       set => ((T*)_native)[index] = value;
     }
 
-    public long Length => _length;
+    public void Read(byte[] buffer, long offset, long count)
+    {
+
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
@@ -73,6 +82,72 @@ namespace IWander.Memory
       }
 
       _disposed = true;
+    }
+
+    public IEnumerator<T> GetEnumerator()
+    {
+      ThrowIfDisposed();
+      return new EnumeratorClass(this);
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+      ThrowIfDisposed();
+      return new EnumeratorClass(this);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ThrowIfDisposed()
+    {
+      if(_disposed) 
+      { 
+        throw new ObjectDisposedException(nameof(Mem<T>), "Memory of array is already free."); 
+      }
+    }
+
+    public unsafe class EnumeratorClass : IEnumerator<T>, IEnumerator
+    {
+      private readonly T* _ptr;
+      private readonly long _len;
+      private long _index;
+
+      internal EnumeratorClass(Mem<T> mem)
+      {
+        _ptr = (T*)mem._native;
+        _len = mem._length;
+        _index = 0;
+        Current = default;
+      }
+
+      public T Current { get; private set; }
+
+      object IEnumerator.Current => Current;
+
+      public void Dispose()
+      {
+        
+      }
+
+      public bool MoveNext()
+      {
+        if((ulong)_index < (ulong)_len)
+        {
+          Current = _ptr[_index++];
+          return true;
+        }
+        else
+        {
+          _index = _len + 1;
+          Current = default;
+          return false;
+        }
+      }
+
+      public void Reset()
+      {
+        _index = 0;
+        Current = default;
+      }
     }
   }
 }
